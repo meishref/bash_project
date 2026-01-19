@@ -64,12 +64,8 @@ create_table() {
         while [[ $valid_type -eq 0 ]]; do
             read -p "Datatype for $column_name (int|string): " datatype
             case "$datatype" in
-                int|string)
-                    valid_type=1
-                ;;
-                *)
-                    echo "Invalid datatype"
-                ;;
+                int|string) valid_type=1 ;;
+                *) echo "Invalid datatype" ;;
             esac
         done
 
@@ -112,6 +108,8 @@ insert_row() {
 
                 if [[ -z "$value" ]]; then
                     echo "Value cannot be empty"
+                elif [[ "$value" == *"|"* ]]; then
+                    echo "Value cannot contain |"
                 elif [[ "$datatype" == "int" && ! "$value" =~ ^[0-9]+$ ]]; then
                     echo "Value must be integer"
                 else
@@ -167,7 +165,11 @@ select_table() {
         case "$choice" in
             1)
                 read -p "Column Number: " col
-                awk -F'|' -v c="$col" '{print $c}' "$table_name.data"
+                if [[ "$col" =~ ^[0-9]+$ ]] && [[ $col -gt 0 ]]; then
+                    awk -F'|' -v c="$col" '{print $c}' "$table_name.data"
+                else
+                    echo "Invalid column number"
+                fi
             ;;
             2)
                 read -p "Column Number: " col
@@ -188,16 +190,22 @@ update_row() {
     if [[ ! -f "$table_name.data" ]]; then
         echo "Table not found"
     else
+        pk_index=$(awk -F: '$3=="PK"{print NR}' "$table_name.meta")
+
         read -p "Primary Key Value: " pk_value
         read -p "Column Number: " col
         read -p "New Value: " new_value
 
-        awk -F'|' -v pk="$pk_value" -v c="$col" -v v="$new_value" '
-        $1==pk {$c=v}
-        {print}
-        ' OFS='|' "$table_name.data" > tmp && mv tmp "$table_name.data"
+        if [[ -z "$new_value" ]] || [[ "$new_value" == *"|"* ]]; then
+            echo "Invalid value"
+        else
+            awk -F'|' -v pk="$pk_value" -v idx="$pk_index" -v c="$col" -v v="$new_value" '
+            $idx==pk {$c=v}
+            {print}
+            ' OFS='|' "$table_name.data" > tmp && mv tmp "$table_name.data"
 
-        echo "Row updated successfully"
+            echo "Row updated successfully"
+        fi
     fi
 }
 
@@ -211,8 +219,10 @@ delete_row() {
     if [[ ! -f "$table_name.data" ]]; then
         echo "Table not found"
     else
+        pk_index=$(awk -F: '$3=="PK"{print NR}' "$table_name.meta")
+
         read -p "Primary Key Value to delete: " pk_value
-        sed -i "/^$pk_value|/d" "$table_name.data"
+        awk -F'|' -v idx="$pk_index" -v pk="$pk_value" '$idx!=pk' "$table_name.data" > tmp && mv tmp "$table_name.data"
         echo "Row deleted successfully"
     fi
 }
@@ -228,7 +238,7 @@ drop_table() {
         echo "Table not found"
     else
         read -p "Type YES to confirm delete table: " confirm
-        if [[ "$confirm" == "YES" ]]; then
+        if [[ "$confirm" == "YES" || "$confirm" == "yes" ]]; then
             rm "$table_name.meta" "$table_name.data"
             echo "Table deleted successfully"
         else
