@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 
-# Colors
+# ===== Project Root (IMPORTANT FIX) =====
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ===== Colors =====
 Red="\033[31m"
 Green="\033[32m"
 Reset="\033[0m"
 
-# DBMS Root Directory
+# ===== DBMS Root Directory =====
 DBMS_DIR="$HOME/.DBMS"
 
 ##################################
@@ -46,7 +49,7 @@ list_db() {
 
     mkdir -p "$DBMS_DIR"
 
-    databases=$(ls -F "$DBMS_DIR" | grep '/' | tr -d '/')
+    databases=$(ls -F "$DBMS_DIR" 2>/dev/null | grep '/' | tr -d '/')
 
     if [[ -z "$databases" ]]; then
         echo "No databases found"
@@ -69,10 +72,10 @@ connect_db() {
     elif [[ ! -d "$DBMS_DIR/$db" ]]; then
         echo -e "${Red}Database not found${Reset}"
     else
-        cd "$DBMS_DIR/$db"
+        cd "$DBMS_DIR/$db" || return
 
         export PS3="$db>> "
-        source "$(dirname "$0")/table.sh"
+        source "$PROJECT_DIR/table.sh"
         export PS3="DBMS>> "
     fi
 }
