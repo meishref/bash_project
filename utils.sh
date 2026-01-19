@@ -2,66 +2,80 @@
 shopt -s extglob
 
 # ===== Colors =====
-readonly Red="\e[31m"
-readonly Green="\e[32m"
-readonly Yellow="\e[33m"
-readonly Reset="\e[0m"
+Red="\e[31m"
+Green="\e[32m"
+Yellow="\e[33m"
+Reset="\e[0m"
 
 # ===== DBMS Root =====
-readonly DBMS_DIR="$HOME/.DBMS"
+DBMS_DIR="$HOME/.DBMS"
 
 #################################
-# Validate Names (DB / Table / Column)
+# Validate Name (DB / Table / Column)
 #################################
 validate_name() {
-    local name="$1"
-    local type="$2"
 
-    # Empty
-    if [[ -z $name ]]; then
-        echo -e "$Red Error: $type name can't be empty $Reset"
-        return 1
-    fi
+    name="$1"
+    type="$2"
+    valid=1
 
-    # Starts with number
-    if [[ $name == [0-9]* ]]; then
-        echo -e "$Red Error: $type name can't start with number $Reset"
-        return 1
-    fi
-
-    # Only underscore
-    if [[ $name == "_" ]]; then
-        echo -e "$Red Error: $type name can't be '_' $Reset"
-        return 1
-    fi
-
-    # Invalid characters
-    if [[ ! $name =~ ^[a-zA-Z][a-zA-Z0-9_]*$ ]]; then
+    if [[ -z "$name" ]]; then
+        echo -e "$Red Error: $type name cannot be empty $Reset"
+        valid=0
+    elif [[ "$name" = [0-9]* ]]; then
+        echo -e "$Red Error: $type name cannot start with number $Reset"
+        valid=0
+    elif [[ "$name" == "_" ]]; then
+        echo -e "$Red Error: $type name cannot be '_' $Reset"
+        valid=0
+    elif [[ ! "$name" =~ ^[a-zA-Z][a-zA-Z0-9_]*$ ]]; then
         echo -e "$Red Error: Invalid $type name $Reset"
-        return 1
+        valid=0
     fi
 
-    return 0
+    if [[ $valid -eq 1 ]]; then
+        echo "VALID"
+    else
+        echo "INVALID"
+    fi
 }
 
 #################################
 # Validate Datatype
 #################################
 validate_datatype() {
-    case "$1" in
+
+    datatype="$1"
+    valid=1
+
+    case "$datatype" in
         int|string)
-            return 0
+            valid=1
         ;;
         *)
             echo -e "$Red Error: Invalid datatype (int|string) $Reset"
-            return 1
+            valid=0
         ;;
     esac
+
+    if [[ $valid -eq 1 ]]; then
+        echo "VALID"
+    else
+        echo "INVALID"
+    fi
 }
 
 #################################
-# Validate Integer Value
+# Validate Integer
 #################################
 validate_int() {
-    [[ $1 =~ ^[0-9]+$ ]]
+
+    number="$1"
+
+    if [[ "$number" =~ ^[0-9]+$ ]]; then
+        echo "VALID"
+    else
+        echo -e "$Red Error: Not a valid integer $Reset"
+        echo "INVALID"
+    fi
 }

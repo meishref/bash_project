@@ -1,44 +1,94 @@
 #!/usr/bin/env bash
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$PROJECT_DIR/utils.sh"
+LC_COLLATE=C
+shopt -s extglob
 
 ##################################
 # Create Table
 ##################################
 create_table() {
 
-    read -p "Table Name: " table_name
-    validate_name "$table_name" "Table" || return
+    valid_table=0
+    while [[ $valid_table -eq 0 ]]; do
+        read -p "Enter Table Name: " table_name
+        table_name=$(tr " " "_" <<< "$table_name")
 
-    [[ -f "$table_name.data" ]] && echo "Table Exists" && return
+        if [[ -z "$table_name" ]]; then
+            echo "Table name cannot be empty"
+        elif [[ "$table_name" = [0-9]* ]]; then
+            echo "Table name cannot start with number"
+        elif [[ "$table_name" == "_" ]]; then
+            echo "Invalid table name"
+        elif [[ ! "$table_name" =~ ^[a-zA-Z][a-zA-Z0-9_]*$ ]]; then
+            echo "Invalid characters in table name"
+        elif [[ -f "$table_name.meta" ]]; then
+            echo "Table already exists"
+        else
+            valid_table=1
+        fi
+    done
 
-    read -p "Columns Count: " columns_count
-    validate_int "$columns_count" || { echo "Invalid number"; return; }
+    valid_columns=0
+    while [[ $valid_columns -eq 0 ]]; do
+        read -p "Enter number of columns: " columns_count
+        if [[ "$columns_count" =~ ^[0-9]+$ ]] && [[ $columns_count -gt 0 ]]; then
+            valid_columns=1
+        else
+            echo "Enter valid positive number"
+        fi
+    done
 
     > "$table_name.meta"
 
-    for ((column_index=1; column_index<=columns_count; column_index++)); do
+    for ((i=1; i<=columns_count; i++)); do
 
-        read -p "Column $column_index Name: " column_name
-        validate_name "$column_name" "Column" || return
+        valid_column=0
+        while [[ $valid_column -eq 0 ]]; do
+            read -p "Column $i Name: " column_name
+            column_name=$(tr " " "_" <<< "$column_name")
 
-        read -p "Datatype (int|string): " datatype
-        validate_datatype "$datatype" || return
+            if [[ -z "$column_name" ]]; then
+                echo "Column name cannot be empty"
+            elif [[ "$column_name" = [0-9]* ]]; then
+                echo "Column name cannot start with number"
+            elif [[ ! "$column_name" =~ ^[a-zA-Z][a-zA-Z0-9_]*$ ]]; then
+                echo "Invalid column name"
+            elif grep -q "^$column_name:" "$table_name.meta"; then
+                echo "Column already exists"
+            else
+                valid_column=1
+            fi
+        done
+
+        valid_type=0
+        while [[ $valid_type -eq 0 ]]; do
+            read -p "Datatype for $column_name (int|string): " datatype
+            case "$datatype" in
+                int|string)
+                    valid_type=1
+                ;;
+                *)
+                    echo "Invalid datatype"
+                ;;
+            esac
+        done
 
         echo "$column_name:$datatype" >> "$table_name.meta"
     done
 
-    read -p "Primary Key Column: " primary_key
-    grep -q "^$primary_key:" "$table_name.meta" || {
-        echo "Primary Key Not Found"
-        return
-    }
-
-    sed -i "s/^$primary_key:.*/&:PK/" "$table_name.meta"
+    valid_pk=0
+    while [[ $valid_pk -eq 0 ]]; do
+        read -p "Primary Key Column: " primary_key
+        if grep -q "^$primary_key:" "$table_name.meta"; then
+            sed -i "s/^$primary_key:.*/&:PK/" "$table_name.meta"
+            valid_pk=1
+        else
+            echo "Primary key must be one of the columns"
+        fi
+    done
 
     touch "$table_name.data"
-    echo "Table Created Successfully"
+    echo "Table '$table_name' created successfully"
 }
 
 ##################################
@@ -46,60 +96,86 @@ create_table() {
 ##################################
 insert_row() {
 
-    read -p "Table Name: " table_name
-    [[ ! -f "$table_name.meta" ]] && echo "Table Not Found" && return
+    read -p "Enter Table Name: " table_name
 
-    row_data=""
-    column_index=1
+    if [[ ! -f "$table_name.meta" ]]; then
+        echo "Table not found"
+    else
+        row=""
+        column_index=1
 
-    while IFS=: read column_name datatype primary_key_flag; do
+        while IFS=: read column datatype pk; do
 
-        read -p "Enter $column_name: " value
+            valid_value=0
+            while [[ $valid_value -eq 0 ]]; do
+                read -p "Enter value for $column: " value
 
-        [[ $datatype == "int" ]] && ! validate_int "$value" && {
-            echo "Invalid Integer Value"
-            return
-        }
+                if [[ -z "$value" ]]; then
+                    echo "Value cannot be empty"
+                elif [[ "$datatype" == "int" && ! "$value" =~ ^[0-9]+$ ]]; then
+                    echo "Value must be integer"
+                else
+                    if [[ "$pk" == "PK" ]]; then
+                        exists=$(cut -d'|' -f$column_index "$table_name.data" | grep -x "$value")
+                        if [[ -n "$exists" ]]; then
+                            echo "Primary key already exists"
+                        else
+                            valid_value=1
+                        fi
+                    else
+                        valid_value=1
+                    fi
+                fi
+            done
 
-        if [[ $primary_key_flag == "PK" ]]; then
-            cut -d'|' -f$column_index "$table_name.data" | grep -x "$value" >/dev/null && {
-                echo "Primary Key Exists"
-                return
-            }
-        fi
+            row="$row|$value"
+            ((column_index++))
 
-        row_data+="$value|"
-        ((column_index++))
+        done < "$table_name.meta"
 
-    done < "$table_name.meta"
-
-    echo "${row_data%|}" >> "$table_name.data"
-    echo "Row Inserted"
+        echo "${row#|}" >> "$table_name.data"
+        echo "Row inserted successfully"
+    fi
 }
 
 ##################################
-# Select Table
+# Select Table (Advanced)
 ##################################
 select_table() {
 
-    read -p "Table Name: " table_name
-    [[ ! -f "$table_name.data" ]] && echo "Table Not Found" && return
+    read -p "Enter Table Name: " table_name
 
-    awk -F: '{print $1}' "$table_name.meta" | paste -sd '|'
-    echo "-------------------------"
-    column -t -s '|' "$table_name.data"
-}
+    if [[ ! -f "$table_name.data" ]]; then
+        echo "Table not found"
+    else
+        echo "Columns:"
+        awk -F: '{print $1}' "$table_name.meta" | paste -sd '|'
+        echo "---------------------"
 
-##################################
-# Delete Row
-##################################
-delete_row() {
+        if [[ ! -s "$table_name.data" ]]; then
+            echo "No data found"
+        else
+            column -t -s '|' "$table_name.data"
+        fi
 
-    read -p "Table Name: " table_name
-    read -p "Primary Key Value: " primary_key_value
+        echo ""
+        echo "1) Select Column"
+        echo "2) Search Value"
+        echo "3) Exit"
+        read -p "Choice: " choice
 
-    sed -i "/^$primary_key_value|/d" "$table_name.data"
-    echo "Row Deleted"
+        case "$choice" in
+            1)
+                read -p "Column Number: " col
+                awk -F'|' -v c="$col" '{print $c}' "$table_name.data"
+            ;;
+            2)
+                read -p "Column Number: " col
+                read -p "Search Value: " val
+                awk -F'|' -v c="$col" -v v="$val" '$c==v {print NR,$0}' "$table_name.data"
+            ;;
+        esac
+    fi
 }
 
 ##################################
@@ -107,17 +183,56 @@ delete_row() {
 ##################################
 update_row() {
 
-    read -p "Table Name: " table_name
-    read -p "Primary Key Value: " primary_key_value
-    read -p "Column Number: " column_number
-    read -p "New Value: " new_value
+    read -p "Enter Table Name: " table_name
 
-    validate_int "$column_number" || { echo "Invalid Column Number"; return; }
+    if [[ ! -f "$table_name.data" ]]; then
+        echo "Table not found"
+    else
+        read -p "Primary Key Value: " pk_value
+        read -p "Column Number: " col
+        read -p "New Value: " new_value
 
-    awk -F'|' -v pk="$primary_key_value" -v col="$column_number" -v val="$new_value" '
-        $1==pk { $col=val }
-        { print }
-    ' OFS='|' "$table_name.data" > tmp && mv tmp "$table_name.data"
+        awk -F'|' -v pk="$pk_value" -v c="$col" -v v="$new_value" '
+        $1==pk {$c=v}
+        {print}
+        ' OFS='|' "$table_name.data" > tmp && mv tmp "$table_name.data"
 
-    echo "Row Updated"
+        echo "Row updated successfully"
+    fi
+}
+
+##################################
+# Delete Row
+##################################
+delete_row() {
+
+    read -p "Enter Table Name: " table_name
+
+    if [[ ! -f "$table_name.data" ]]; then
+        echo "Table not found"
+    else
+        read -p "Primary Key Value to delete: " pk_value
+        sed -i "/^$pk_value|/d" "$table_name.data"
+        echo "Row deleted successfully"
+    fi
+}
+
+##################################
+# Drop Table
+##################################
+drop_table() {
+
+    read -p "Enter Table Name: " table_name
+
+    if [[ ! -f "$table_name.meta" ]]; then
+        echo "Table not found"
+    else
+        read -p "Type YES to confirm delete table: " confirm
+        if [[ "$confirm" == "YES" ]]; then
+            rm "$table_name.meta" "$table_name.data"
+            echo "Table deleted successfully"
+        else
+            echo "Delete canceled"
+        fi
+    fi
 }
