@@ -3,9 +3,7 @@
 LC_COLLATE=C
 shopt -s extglob
 
-##################################
-# Create Table
-##################################
+
 create_table() {
 
     valid_table=0
@@ -87,58 +85,66 @@ create_table() {
     echo "Table '$table_name' created successfully"
 }
 
-##################################
-# Insert Row
-##################################
+
 insert_row() {
 
     read -p "Enter Table Name: " table_name
 
     if [[ ! -f "$table_name.meta" ]]; then
         echo "Table not found"
-    else
-        row=""
-        column_index=1
-
-        while IFS=: read column datatype pk; do
-
-            valid_value=0
-            while [[ $valid_value -eq 0 ]]; do
-                read -p "Enter value for $column: " value
-
-                if [[ -z "$value" ]]; then
-                    echo "Value cannot be empty"
-                elif [[ "$value" == *"|"* ]]; then
-                    echo "Value cannot contain |"
-                elif [[ "$datatype" == "int" && ! "$value" =~ ^[0-9]+$ ]]; then
-                    echo "Value must be integer"
-                else
-                    if [[ "$pk" == "PK" ]]; then
-                        exists=$(cut -d'|' -f$column_index "$table_name.data" | grep -x "$value")
-                        if [[ -n "$exists" ]]; then
-                            echo "Primary key already exists"
-                        else
-                            valid_value=1
-                        fi
-                    else
-                        valid_value=1
-                    fi
-                fi
-            done
-
-            row="$row|$value"
-            ((column_index++))
-
-        done < "$table_name.meta"
-
-        echo "${row#|}" >> "$table_name.data"
-        echo "Row inserted successfully"
+        return
     fi
+
+    row=""
+    column_index=1
+
+   
+    while IFS=':' read -r column datatype pk; do
+
+       
+        if [[ -z "$column" || -z "$datatype" ]]; then
+            continue
+        fi
+
+        valid_value=0
+        while [[ $valid_value -eq 0 ]]; do
+
+           
+            read -p "Enter value for $column: " value </dev/tty
+
+            if [[ -z "$value" ]]; then
+                echo "Value cannot be empty"
+
+            elif [[ "$value" == *"|"* ]]; then
+                echo "Value cannot contain |"
+
+            elif [[ "$datatype" == "int" && ! "$value" =~ ^[0-9]+$ ]]; then
+                echo "Value must be integer"
+
+            elif [[ "$pk" == "PK" ]]; then
+                exists=$(cut -d'|' -f$column_index "$table_name.data" 2>/dev/null | grep -x "$value")
+                if [[ -n "$exists" ]]; then
+                    echo "Primary key already exists"
+                else
+                    valid_value=1
+                fi
+
+            else
+                valid_value=1
+            fi
+        done
+
+        row="$row|$value"
+        ((column_index++))
+
+    done < "$table_name.meta"
+
+    echo "${row#|}" >> "$table_name.data"
+    echo "Row inserted successfully"
 }
 
-##################################
-# Select Table (Advanced)
-##################################
+
+
 select_table() {
 
     read -p "Enter Table Name: " table_name
@@ -180,69 +186,172 @@ select_table() {
     fi
 }
 
-##################################
-# Update Row
-##################################
+
 update_row() {
 
     read -p "Enter Table Name: " table_name
 
-    if [[ ! -f "$table_name.data" ]]; then
+    if [[ ! -f "$table_name.meta" || ! -f "$table_name.data" ]]; then
         echo "Table not found"
-    else
-        pk_index=$(awk -F: '$3=="PK"{print NR}' "$table_name.meta")
-
-        read -p "Primary Key Value: " pk_value
-        read -p "Column Number: " col
-        read -p "New Value: " new_value
-
-        if [[ -z "$new_value" ]] || [[ "$new_value" == *"|"* ]]; then
-            echo "Invalid value"
-        else
-            awk -F'|' -v pk="$pk_value" -v idx="$pk_index" -v c="$col" -v v="$new_value" '
-            $idx==pk {$c=v}
-            {print}
-            ' OFS='|' "$table_name.data" > tmp && mv tmp "$table_name.data"
-
-            echo "Row updated successfully"
-        fi
+        return
     fi
+
+   
+    pk_index=$(awk -F: '$3=="PK"{print NR}' "$table_name.meta")
+
+    if [[ -z "$pk_index" ]]; then
+        echo "Primary key not defined"
+        return
+    fi
+
+    read -p "Enter Primary Key value: " pk_value </dev/tty
+
+   
+    row_num=$(awk -F'|' -v idx="$pk_index" -v pk="$pk_value" '$idx==pk {print NR}' "$table_name.data")
+
+    if [[ -z "$row_num" ]]; then
+        echo "Row not found"
+        return
+    fi
+
+    echo "Current Row:"
+    sed -n "${row_num}p" "$table_name.data"
+
+    
+    echo "Columns:"
+    awk -F: '{print NR ") " $1}' "$table_name.meta"
+
+    read -p "Choose column number to update: " col_num </dev/tty
+
+    if [[ ! "$col_num" =~ ^[0-9]+$ ]]; then
+        echo "Invalid column number"
+        return
+    fi
+
+    
+    if [[ "$col_num" -eq "$pk_index" ]]; then
+        echo "Cannot update Primary Key"
+        return
+    fi
+
+   
+    datatype=$(awk -F: -v n="$col_num" 'NR==n {print $2}' "$table_name.meta")
+
+    read -p "Enter new value: " new_value </dev/tty
+
+    if [[ -z "$new_value" ]]; then
+        echo "Value cannot be empty"
+        return
+    fi
+
+    if [[ "$new_value" == *"|"* ]]; then
+        echo "Value cannot contain |"
+        return
+    fi
+
+    if [[ "$datatype" == "int" && ! "$new_value" =~ ^[0-9]+$ ]]; then
+        echo "Value must be integer"
+        return
+    fi
+
+   
+    awk -F'|' -v r="$row_num" -v c="$col_num" -v v="$new_value" '
+        NR==r {$c=v}
+        {print}
+    ' OFS='|' "$table_name.data" > tmp && mv tmp "$table_name.data"
+
+    echo "Row updated successfully"
 }
 
-##################################
-# Delete Row
-##################################
+
+
 delete_row() {
 
     read -p "Enter Table Name: " table_name
 
-    if [[ ! -f "$table_name.data" ]]; then
+    if [[ ! -f "$table_name.meta" || ! -f "$table_name.data" ]]; then
         echo "Table not found"
-    else
-        pk_index=$(awk -F: '$3=="PK"{print NR}' "$table_name.meta")
-
-        read -p "Primary Key Value to delete: " pk_value
-        awk -F'|' -v idx="$pk_index" -v pk="$pk_value" '$idx!=pk' "$table_name.data" > tmp && mv tmp "$table_name.data"
-        echo "Row deleted successfully"
+        return
     fi
+
+    if [[ ! -s "$table_name.data" ]]; then
+        echo "Table is empty"
+        return
+    fi
+
+    echo "Current Data:"
+    cat -n "$table_name.data"
+
+  
+    pk_index=$(awk -F: '$3=="PK"{print NR}' "$table_name.meta")
+
+    if [[ -z "$pk_index" ]]; then
+        echo "Primary key not defined"
+        return
+    fi
+
+    echo ""
+    echo "1) Delete by Primary Key"
+    echo "2) Delete all rows"
+    read -p "Choice: " choice </dev/tty
+
+    case "$choice" in
+        1)
+            read -p "Enter Primary Key value: " pk_value </dev/tty
+
+            row_num=$(awk -F'|' -v idx="$pk_index" -v pk="$pk_value" '
+                $idx==pk {print NR}
+            ' "$table_name.data")
+
+            if [[ -z "$row_num" ]]; then
+                echo "Row not found"
+                return
+            fi
+
+            read -p "Confirm delete (YES): " confirm </dev/tty
+            if [[ "$confirm" == "YES" ]]; then
+                sed -i "${row_num}d" "$table_name.data"
+                echo "Row deleted successfully"
+            else
+                echo "Delete cancelled"
+            fi
+            ;;
+        2)
+            read -p "Delete ALL rows? Type YES: " confirm </dev/tty
+            if [[ "$confirm" == "YES" ]]; then
+                > "$table_name.data"
+                echo "All rows deleted"
+            else
+                echo "Cancelled"
+            fi
+            ;;
+        *)
+            echo "Invalid choice"
+            ;;
+    esac
 }
 
-##################################
-# Drop Table
-##################################
+
 drop_table() {
 
     read -p "Enter Table Name: " table_name
 
-    if [[ ! -f "$table_name.meta" ]]; then
+    if [[ ! -f "$table_name.meta" || ! -f "$table_name.data" ]]; then
         echo "Table not found"
+        return
+    fi
+
+    rows=$(wc -l < "$table_name.data" 2>/dev/null)
+
+    echo "WARNING!"
+    echo "This will delete table '$table_name' and $rows row(s)."
+
+    read -p "Type table name to confirm: " confirm </dev/tty
+
+    if [[ "$confirm" == "$table_name" ]]; then
+        rm -f "$table_name.meta" "$table_name.data"
+        echo "Table '$table_name' dropped successfully"
     else
-        read -p "Type YES to confirm delete table: " confirm
-        if [[ "$confirm" == "YES" || "$confirm" == "yes" ]]; then
-            rm "$table_name.meta" "$table_name.data"
-            echo "Table deleted successfully"
-        else
-            echo "Delete canceled"
-        fi
+        echo "Cancelled"
     fi
 }

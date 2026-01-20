@@ -1,19 +1,17 @@
 #!/usr/bin/env bash
 
-# ===== Project Root (IMPORTANT FIX) =====
+
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# ===== Colors =====
+
 Red="\033[31m"
 Green="\033[32m"
 Reset="\033[0m"
 
-# ===== DBMS Root Directory =====
+
 DBMS_DIR="$HOME/.DBMS"
 
-##################################
-# Create Database
-##################################
+
 create_db() {
 
     mkdir -p "$DBMS_DIR"
@@ -42,9 +40,7 @@ create_db() {
     echo -e "${Green}Database '$db' created successfully${Reset}"
 }
 
-##################################
-# List Databases
-##################################
+
 list_db() {
 
     mkdir -p "$DBMS_DIR"
@@ -59,9 +55,7 @@ list_db() {
     fi
 }
 
-##################################
-# Connect Database
-##################################
+
 connect_db() {
 
     read -p "Enter Database Name: " db
@@ -80,9 +74,7 @@ connect_db() {
     fi
 }
 
-##################################
-# Remove Database
-##################################
+
 remove_db() {
 
     databases=$(ls "$DBMS_DIR" 2>/dev/null)
