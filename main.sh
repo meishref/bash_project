@@ -23,19 +23,15 @@ do
         case $REPLY in
             1)
                 create_db
-                break
             ;;
             2)
                 list_db
-                break
             ;;
             3)
                 connect_db
-                break
             ;;
             4)
                 remove_db
-                break
             ;;
             5)
                 echo "Exiting DBMS..."
@@ -43,7 +39,6 @@ do
             ;;
             *)
                 echo "Invalid choice, select 1-5"
-                break
             ;;
         esac
     done
