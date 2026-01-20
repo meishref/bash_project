@@ -46,7 +46,6 @@ do
         ;;
         8)
             echo "Returning to DB Menu..."
-            break
         ;;
         *)
             echo "Invalid Choice, select number 1-8"
