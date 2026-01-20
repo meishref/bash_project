@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# Get project root directory safely
+
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Load table functions
+
 source "$PROJECT_DIR/table_functions.sh"
 
 menu=(

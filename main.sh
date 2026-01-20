@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# Get project root directory (works anywhere)
+
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Load database functions
+
 source "$PROJECT_DIR/db_functions.sh"
 
 export PS3="DBMS>> "
